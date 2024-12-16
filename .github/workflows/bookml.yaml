@@ -1,0 +1,32 @@
+name: Compile with BookML
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out LaTeX files
+        uses: actions/checkout@v4
+      - name: Compile with BookML
+        id: bookml
+        # you may replace bookml with bookml-basic, bookml-small, bookml-medium to download fewer packages
+        uses: docker://ghcr.io/vlmantova/bookml:latest
+        with:
+          args: -k all
+        timeout-minutes: 10 # increase if required
+      - name: Pack auxiliary folder
+        uses: docker://ghcr.io/vlmantova/bookml-basic:latest
+        with:
+          args: aux-zip
+      - name: Upload outputs
+        if: ${{ always() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          notes: |-
+            ${{ steps.bookml.outcome == 'cancelled' && '**The build was cancelled. Some outputs may be missing.** ' || ( steps.bookml.outcome == 'failure' && '**Parts of the build have failed. Consult the AUX file for more information.** ' || '' ) }}
+            Commit message: ${{ github.event.head_commit.message }}
+          title: "${{ steps.bookml.outcome == 'cancelled' && 'cancelled' || ( steps.bookml.outcome == 'failure' && 'failed' || 'successful' ) }} build: ${{ github.event.head_commit.message }}"
+          ref: ${{ github.ref_name }}
+          tag: build-${{ github.run_number }}
+        run: gh release create "$tag" --target="$ref" --repo="$GITHUB_REPOSITORY" --title="$title" --notes="$notes" *.zip
